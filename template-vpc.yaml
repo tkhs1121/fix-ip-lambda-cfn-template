@@ -1,0 +1,233 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Fix IP Lambda VPC
+
+Parameters: 
+  VpcCidr: 
+    Type: String
+    Default: 10.0.0.0/16
+    Description: VPC CIDR block.
+  VPCSubnet1Zone:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: ap-northeast-1c
+    Description: 1st VPC Subnet zone.
+  VPCSubnet1PublicCidr:
+    Type: String
+    Default: 10.0.0.0/24
+    Description: 1st VPC Public Subnet CIDR block.
+  VPCSubnet1PrivateCidr:
+    Type: String
+    Default: 10.0.1.0/24
+    Description: 1st VPC Private Subnet CIDR block.
+Resources:
+  AdditionalPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+      Description:Fix IP Lambda Lambda policy
+      PolicyDocument: 
+        Version: '2012-10-17'
+        Statement: 
+          - Effect: Allow
+            Action: 
+              - ec2:CreateNetworkInterface
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DeleteNetworkInterface
+              - ec2:AssignPrivateIpAddresses
+              - ec2:UnassignPrivateIpAddresses
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSubnets
+              - ec2:DescribeVpcs
+            Resource: '*'
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 
+        Fn::Sub: ${VpcCidr}
+      Tags:
+        - Key: Name
+          Value: Fix IP Lambda VPC
+        - Key: CloudFormation
+          Value: 
+            Fn::Sub: ${AWS::StackName}
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription:Fix IP Lambda VPC attached security group.
+      GroupName: ${AWS::StackName}-lambda-sg
+      SecurityGroupEgress: 
+        - CidrIp: 0.0.0.0/0
+          Description: Allow Http access v4
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - CidrIp: 0.0.0.0/0
+          Description: Allow Https access v4
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+        - CidrIpv6: ::/0
+          Description: Allow Http access v6
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - CidrIpv6: ::/0
+          Description: Allow Https access v6
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+      VpcId: 
+        Ref: VPC
+      Tags:
+        - Key: Name
+          value: fix IP Lambda SG
+        - Key: CloudFormation
+          Value: 
+            Fn::Sub: ${AWS::StackName}
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          value: fix IP Lambda IG
+        - Key: CloudFormation
+          Value: 
+            Fn::Sub: ${AWS::StackName}
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: 
+        Ref: InternetGateway
+      VpcId: 
+        Ref: VPC
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: 
+        Fn::Sub: ${VPCSubnet1Zone}
+      CidrBlock: 
+        Fn::Sub: ${VPCSubnet1PublicCidr}
+      VpcId: 
+        Ref: VPC
+      Tags:
+        - Key: Name
+          value: fix IP Lambda Public Subnet 1
+        - Key: CloudFormation
+          Value: 
+            Fn::Sub: ${AWS::StackName}
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: 
+        Fn::Sub: ${VPCSubnet1Zone}
+      CidrBlock: 
+        Fn::Sub: ${VPCSubnet1PrivateCidr}
+      VpcId: 
+        Ref: VPC
+      Tags:
+        - Key: Name
+          value: fix IP Lambda Private Subnet 1
+        - Key: CloudFormation
+          Value: 
+            Fn::Sub: ${AWS::StackName}
+  EIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          value: fix IP Lambda EIP
+        - Key: CloudFormation
+          Value: 
+            Fn::Sub: ${AWS::StackName}
+  NatGateway1: 
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: 
+        Fn::Sub: ${EIP1.AllocationId}
+      ConnectivityType: public
+      SubnetId: 
+        Ref: PublicSubnet1
+      Tags:
+        - Key: Name
+          value: fix IP Lambda Natgateway 1
+        - Key: CloudFormation
+          Value: 
+            Fn::Sub: ${AWS::StackName}
+  PublicRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: 
+        Ref: VPC
+      Tags:
+        - Key: Name
+          value: fix IP Lambda Public Route Table 1
+        - Key: CloudFormation
+          Value: 
+            Fn::Sub: ${AWS::StackName}
+  PublicRoute1: 
+    Type: AWS::EC2::Route
+    DependsOn: 
+      - InternetGateway
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: 
+        Ref: InternetGateway
+      RouteTableId:
+        Ref: PublicRouteTable1
+  PrivateRouteTable1: 
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: 
+        Ref: VPC
+      Tags:
+        - Key: Name
+          value: fix IP Lambda Private Route Table 1
+        - Key: CloudFormation
+          Value: 
+            Fn::Sub: ${AWS::StackName}
+  PrivateRoute1: 
+    Type: AWS::EC2::Route
+    DependsOn: 
+      - NatGateway1
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: 
+        Ref: NatGateway1
+      RouteTableId:
+        Ref: PrivateRouteTable1
+  PublicRouteAssign1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: 
+        Ref: PublicRouteTable1
+      SubnetId: 
+        Ref: PublicSubnet1
+  PrivateRouteAssign1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: 
+        Ref: PrivateRouteTable1
+      SubnetId: 
+        Ref: PrivateSubnet1
+Outputs:
+  AdditionalPolicy: 
+    Description: Lambda additional policy
+    Value:
+      Fn::Sub: ${AdditionalPolicy}
+    Export:
+      Name: FixIPLambda-AdditionalPolicy
+  SecurityGroup:
+    Description: Security Group
+    Value: 
+      Fn::Sub: ${SecurityGroup}
+    Export:
+      Name: FixIPLambda-SecurityGroup
+  PrivateSubnet1:
+    Description: Subnet1 Private Subnet 1
+    Value:
+      Fn::Sub: ${PrivateSubnet1}
+    Export:
+      Name: FixIPLambda-PrivateSubnet1
+  PublicIp1:
+    Description: Subnet1 Public IP
+    Value: 
+      Fn::Sub: ${EIP1.PublicIp}

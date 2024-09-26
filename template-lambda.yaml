@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Fix IP Lambda
+  
+Parameters:
+  URL:
+    Type: string
+    Default: "https://example.com"
+  FixIPEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+
+Conditions:
+  IsFixIPEnabled: !Equals [ !Ref FixIPEnabled, "true"]
+
+Resources:
+  Function:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: fix-ip-lambda
+      Handler: bootstrap
+      Runtime: provided.al2
+      CodeUri: .
+      Timeout: 30
+      Policies:
+        - !If
+          - IsFixIPEnabled
+          - !ImportValue FixIPLambda-AdditionalPolicy
+          - !Ref AWS::NoValue
+      Environment:
+        Variables:
+          URL: !Ref URL
+      Events:
+        CWSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+            Name: !Sub fix-ip-lambda-schedule
+            Description: Fix IP Lambda
+            Enabled: True
+      VpcConfig:
+        !If
+          - IsVPCEnabled
+          - SecurityGroupIds: [!ImportValue FixIPLambda--SecurityGroup]
+            SubnetIds: [!ImportValue FixIPLambda--PrivateSubnet1]
+          - !Ref AWS::NoValue
+    Metadata:
+      BuildMethod: go1.x

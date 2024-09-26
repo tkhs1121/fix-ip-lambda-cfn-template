@@ -1,0 +1,18 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Fix IP Lambda S3 Bucket Configulation yaml
+
+Parameters:
+  BucketName:
+    Type: String
+
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+
+Outputs:
+  Bucket: 
+    Value: !Ref Bucket
+    Export:
+      Name: FixIPLambda-Bucket
